@@ -1,0 +1,693 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <title>文字武侠 · 不规则缩放地图（新手村出生）</title>
+  <style>
+    body {
+      background: #1a1a1a;
+      color: #d4c8a5;
+      font-family: "Courier New", monospace;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+      margin: 0;
+      padding: 20px;
+      box-sizing: border-box;
+    }
+    .game-box {
+      background: #2b2b2b;
+      border: 2px solid #5a4a32;
+      padding: 20px;
+      width: 720px;
+      max-width: 100%;
+      box-shadow: 0 0 15px rgba(0,0,0,0.7);
+    }
+    h2 {
+      text-align: center;
+      color: #e3b56f;
+      margin: 0 0 10px;
+    }
+    .info {
+      margin: 15px 0;
+      line-height: 1.8;
+      font-size: 14px;
+    }
+    .label {
+      color: #b9a077;
+    }
+    input, button {
+      background: #111;
+      color: #d4c8a5;
+      border: 1px solid #5a4a32;
+      padding: 8px;
+      width: 100%;
+      box-sizing: border-box;
+      font-family: inherit;
+      margin-bottom: 8px;
+    }
+    button {
+      cursor: pointer;
+      background: #3e3627;
+      font-weight: bold;
+    }
+    button:hover {
+      background: #5a4a32;
+    }
+    .hidden {
+      display: none;
+    }
+    .map-container {
+      background: #1a1a1a;
+      border: 1px solid #5a4a32;
+      overflow: auto;
+      max-height: 450px;
+      margin: 10px 0;
+      position: relative;
+    }
+    .map-grid {
+      display: grid;
+      grid-template-columns: repeat(15, 40px);
+      grid-template-rows: repeat(15, 40px);
+      gap: 2px;
+      justify-content: center;
+      transform-origin: top left;
+      transition: transform 0.1s;
+    }
+    .map-cell {
+      background: #1e2a1e;
+      border: 1px solid #3a5a3a;
+      font-size: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      cursor: pointer;
+      user-select: none;
+      color: #b8c8a0;
+      line-height: 1.1;
+      word-break: break-all;
+    }
+    .map-cell.obstacle {
+      background: #2a2a2a;
+      border-color: #555;
+      color: #777;
+      cursor: not-allowed;
+    }
+    .map-cell.current {
+      border: 2px solid #e3b56f;
+      box-shadow: 0 0 6px #e3b56f;
+      color: #e3b56f;
+      font-weight: bold;
+      z-index: 2;
+    }
+    .map-cell.adjacent {
+      background: #2a3522;
+      border-color: #6b8e5a;
+    }
+    .map-cell.adjacent:hover {
+      background: #3a4a2e;
+      border-color: #9acd7a;
+    }
+    .map-cell.unreachable {
+      background: #1a1a1a;
+      border-color: #444;
+      color: #555;
+      cursor: not-allowed;
+    }
+    .map-cell.battlefield {
+      color: #ff704d;
+      font-weight: bold;
+    }
+    .location-desc {
+      background: #1f2a1f;
+      border: 1px solid #3a5a3a;
+      padding: 10px;
+      margin: 10px 0;
+      font-style: italic;
+      color: #b8c8a0;
+      text-align: center;
+      font-size: 14px;
+    }
+    .enemy-info {
+      background: #2a2018;
+      border: 1px solid #6b4e2e;
+      padding: 10px;
+      margin: 10px 0;
+      text-align: center;
+    }
+    .combat-log {
+      background: #1a1a1a;
+      border: 1px solid #5a4a32;
+      padding: 8px;
+      height: 120px;
+      overflow-y: auto;
+      margin: 10px 0;
+      font-size: 13px;
+      color: #c0b28a;
+    }
+    .flex-buttons {
+      display: flex;
+      gap: 8px;
+    }
+    .flex-buttons button {
+      flex: 1;
+    }
+    .zoom-controls {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      margin: 5px 0;
+    }
+    .zoom-controls button {
+      width: 40px;
+      padding: 4px;
+      font-size: 18px;
+      line-height: 1;
+    }
+    #zoomLevel {
+      color: #e3b56f;
+      font-weight: bold;
+    }
+  </style>
+</head>
+<body>
+<div class="game-box" id="app">
+  <!-- 创建角色界面 -->
+  <div id="create-section">
+    <h2>⚔️ 初入江湖 ⚔️</h2>
+    <p>请输入你的名字：</p>
+    <input type="text" id="nameInput" placeholder="大侠留名" maxlength="10">
+    <button id="createBtn">踏入江湖</button>
+  </div>
+
+  <!-- 角色状态界面 -->
+  <div id="status-section" class="hidden">
+    <h2>📜 江湖行</h2>
+    <div class="info" id="statusPanel"></div>
+    <div class="flex-buttons">
+      <button id="refreshBtn">刷新状态</button>
+      <button id="toExploreBtn">🗺️ 查看地图</button>
+    </div>
+    <p style="font-size:12px; color:#888; margin-top:5px;">（行走江湖，挑战散落各地的战场）</p>
+  </div>
+
+  <!-- 战斗界面 -->
+  <div id="battle-section" class="hidden">
+    <h2>⚔️ 战场</h2>
+    <div class="enemy-info" id="enemyPanel"></div>
+    <div class="combat-log" id="combatLog">战斗一触即发……</div>
+    <div class="flex-buttons">
+      <button id="startAutoBattleBtn">⚡ 自动战斗</button>
+      <button id="fleeBtn" style="background:#3a2a1a;">🏃 逃离</button>
+    </div>
+  </div>
+
+  <!-- 地图界面 -->
+  <div id="explore-section" class="hidden">
+    <h2>🗺️ 江湖地图 (不规则地形)</h2>
+    <p style="text-align:center;"><span class="label">【当前位置】</span> <span id="currentLocationName"></span></p>
+    <div class="zoom-controls">
+      <button id="zoomOutBtn">−</button>
+      <span id="zoomLevel">100%</span>
+      <button id="zoomInBtn">+</button>
+    </div>
+    <div class="map-container" id="mapContainer">
+      <div class="map-grid" id="mapGrid"></div>
+    </div>
+    <div class="location-desc" id="locationDesc"></div>
+    <button id="backFromExploreBtn">🔙 返回</button>
+  </div>
+</div>
+
+<script>
+  // ---------- 工具函数 ----------
+  function escapeHtml(str) {
+    const div = document.createElement('div');
+    div.textContent = str;
+    return div.innerHTML;
+  }
+  function rand(min, max) {
+    return Math.floor(Math.random() * (max - min + 1)) + min;
+  }
+
+  // ---------- 地图生成（15x15 不规则，中央为新手村）----------
+  const MAP_SIZE = 15;
+  const START_X = 7;  // 中央列
+  const START_Y = 7;  // 中央行
+
+  const terrainNames = [
+    "树林","竹林","山道","溪谷","荒地","沙丘","雪原","沼泽","草原","丘陵",
+    "密林","古道","石林","花海","废墟","庙宇","坟场","洞穴","山巅","幽谷",
+    "湖畔","瀑布","悬崖","断桥","农田","牧场","渔村","市集","渡口"
+  ];
+  const terrainDescs = [
+    "风吹过枝叶，沙沙作响。","奇石嶙峋，道路崎岖。","野草没膝，偶有野兔惊窜。",
+    "冷风如刀，黄沙漫天。","积雪没踝，寒意透骨。","空气中有腐烂气味。",
+    "碧浪翻涌，远山如黛。","破旧屋檐下蛛网密布。","钟声悠远，香火缭绕。",
+    "水声如雷，白练腾空。","石壁刻满岁月痕迹。","绳索桥横跨深涧。",
+    "金黄麦浪随风起伏。","热闹集市人来人往。","江湖人歇脚之地。"
+  ];
+
+  let mapGridData = [];
+  let passableGrid = [];
+
+  function generateMap() {
+    mapGridData = [];
+    passableGrid = [];
+
+    // 1. 初始化所有格子为普通可通行
+    for (let y = 0; y < MAP_SIZE; y++) {
+      const row = [];
+      const passRow = [];
+      for (let x = 0; x < MAP_SIZE; x++) {
+        const nameIdx = (y * 15 + x) % terrainNames.length;
+        const descIdx = (x * 7 + y * 3) % terrainDescs.length;
+        row.push({
+          name: terrainNames[nameIdx],
+          desc: terrainDescs[descIdx],
+          isBattlefield: false,
+          enemy: null
+        });
+        passRow.push(true);
+      }
+      mapGridData.push(row);
+      passableGrid.push(passRow);
+    }
+
+    // 2. 设置新手村（强制可通行，且保留周围畅通）
+    // 保护中央及其上下左右（共5格）不会被障碍覆盖
+    const protectedCells = new Set([
+      `${START_X},${START_Y}`,
+      `${START_X-1},${START_Y}`,
+      `${START_X+1},${START_Y}`,
+      `${START_X},${START_Y-1}`,
+      `${START_X},${START_Y+1}`
+    ]);
+
+    mapGridData[START_Y][START_X] = {
+      name: "新手村",
+      desc: "一座宁静的小村庄，炊烟袅袅，几位老农在村口闲聊，这里是梦开始的地方。",
+      isBattlefield: false,
+      enemy: null
+    };
+
+    // 3. 生成障碍（约30%格子），但避开保护区域
+    const obstacleRatio = 0.3;
+    const totalCells = MAP_SIZE * MAP_SIZE;
+    const obstacleCount = Math.floor(totalCells * obstacleRatio);
+    for (let i = 0; i < obstacleCount; i++) {
+      let attempts = 0;
+      while (attempts < 100) {
+        const x = rand(0, MAP_SIZE - 1);
+        const y = rand(0, MAP_SIZE - 1);
+        const key = `${x},${y}`;
+        if (!protectedCells.has(key) && passableGrid[y][x]) {
+          passableGrid[y][x] = false;
+          mapGridData[y][x].name = "山岭";
+          mapGridData[y][x].desc = "陡峭的山壁阻挡了去路，只能绕行。";
+          break;
+        }
+        attempts++;
+      }
+    }
+
+    // 4. 随机8个战场，避开新手村及保护区域
+    const enemyPool = [
+      { name: "山贼", hp: 50, attack: 12, defense: 5, exp: 20 },
+      { name: "野狼", hp: 40, attack: 15, defense: 3, exp: 15 },
+      { name: "毒蛇", hp: 30, attack: 20, defense: 2, exp: 25 },
+      { name: "劫匪", hp: 60, attack: 10, defense: 6, exp: 22 },
+      { name: "恶僧", hp: 70, attack: 14, defense: 7, exp: 30 },
+      { name: "怨灵", hp: 35, attack: 18, defense: 4, exp: 28 },
+      { name: "马贼", hp: 55, attack: 16, defense: 5, exp: 24 },
+      { name: "石傀儡", hp: 80, attack: 8, defense: 10, exp: 18 }
+    ];
+
+    const usedPositions = new Set([`${START_X},${START_Y}`]);
+    // 也将保护区域加入，避免战场出现在紧邻新手村的地方
+    protectedCells.forEach(cell => usedPositions.add(cell));
+
+    let placed = 0;
+    while (placed < 8) {
+      const x = rand(0, MAP_SIZE - 1);
+      const y = rand(0, MAP_SIZE - 1);
+      const key = `${x},${y}`;
+      if (!usedPositions.has(key) && passableGrid[y][x]) {
+        usedPositions.add(key);
+        mapGridData[y][x].isBattlefield = true;
+        mapGridData[y][x].name = "战场";
+        mapGridData[y][x].desc = "空气中弥漫着血腥味，敌人正在此处徘徊。";
+        mapGridData[y][x].enemy = { ...enemyPool[placed % enemyPool.length] };
+        placed++;
+      }
+    }
+  }
+
+  generateMap();
+
+  // ---------- 游戏数据 ----------
+  const player = {
+    name: "",
+    title: "江湖小虾米",
+    hp: 100,
+    maxHp: 100,
+    mp: 50,
+    maxMp: 50,
+    attack: 20,
+    defense: 10,
+    agility: 15,
+    locationX: START_X,
+    locationY: START_Y,
+    exp: 0
+  };
+
+  let currentEnemy = null;
+  let battleActive = false;
+  let autoBattleTimer = null;
+
+  let currentZoom = 1.0;
+  const MIN_ZOOM = 0.5;
+  const MAX_ZOOM = 2.5;
+  const ZOOM_STEP = 0.25;
+
+  // ---------- 界面元素 ----------
+  const createSection = document.getElementById('create-section');
+  const statusSection = document.getElementById('status-section');
+  const battleSection = document.getElementById('battle-section');
+  const exploreSection = document.getElementById('explore-section');
+  const nameInput = document.getElementById('nameInput');
+  const createBtn = document.getElementById('createBtn');
+  const statusPanel = document.getElementById('statusPanel');
+  const refreshBtn = document.getElementById('refreshBtn');
+  const toExploreBtn = document.getElementById('toExploreBtn');
+  const enemyPanel = document.getElementById('enemyPanel');
+  const combatLog = document.getElementById('combatLog');
+  const startAutoBattleBtn = document.getElementById('startAutoBattleBtn');
+  const fleeBtn = document.getElementById('fleeBtn');
+  const currentLocationName = document.getElementById('currentLocationName');
+  const locationDesc = document.getElementById('locationDesc');
+  const mapGrid = document.getElementById('mapGrid');
+  const mapContainer = document.getElementById('mapContainer');
+  const backFromExploreBtn = document.getElementById('backFromExploreBtn');
+  const zoomOutBtn = document.getElementById('zoomOutBtn');
+  const zoomInBtn = document.getElementById('zoomInBtn');
+  const zoomLevelSpan = document.getElementById('zoomLevel');
+
+  // ---------- 辅助函数 ----------
+  function log(msg) {
+    combatLog.innerHTML += escapeHtml(msg) + "<br>";
+    combatLog.scrollTop = combatLog.scrollHeight;
+  }
+  function clearLog() {
+    combatLog.innerHTML = '';
+  }
+  function getCurrentLocation() {
+    return mapGridData[player.locationY][player.locationX];
+  }
+
+  function updateStatus() {
+    const loc = getCurrentLocation();
+    statusPanel.innerHTML = `
+      <p><span class="label">【称号】</span> ${escapeHtml(player.title)}</p>
+      <p><span class="label">【姓名】</span> ${escapeHtml(player.name)}</p>
+      <p><span class="label">【当前位置】</span> ${escapeHtml(loc.name)}</p>
+      <p><span class="label">【生命】</span> ${player.hp} / ${player.maxHp}</p>
+      <p><span class="label">【内力】</span> ${player.mp} / ${player.maxMp}</p>
+      <p><span class="label">【攻击】</span> ${player.attack}　
+         <span class="label">【防御】</span> ${player.defense}　
+         <span class="label">【轻功】</span> ${player.agility}</p>
+      <p><span class="label">【历练】</span> ${player.exp}</p>
+    `;
+  }
+
+  function applyZoom() {
+    mapGrid.style.transform = `scale(${currentZoom})`;
+    zoomLevelSpan.textContent = Math.round(currentZoom * 100) + '%';
+  }
+
+  function setZoom(newZoom) {
+    if (newZoom < MIN_ZOOM || newZoom > MAX_ZOOM) return;
+    currentZoom = newZoom;
+    applyZoom();
+  }
+
+  function updateMap() {
+    const cx = player.locationX;
+    const cy = player.locationY;
+    const currentLoc = getCurrentLocation();
+    currentLocationName.textContent = currentLoc.name;
+    locationDesc.textContent = currentLoc.desc;
+
+    mapGrid.innerHTML = '';
+    for (let y = 0; y < MAP_SIZE; y++) {
+      for (let x = 0; x < MAP_SIZE; x++) {
+        const cellData = mapGridData[y][x];
+        const isPassable = passableGrid[y][x];
+        const cell = document.createElement('div');
+        cell.className = 'map-cell';
+
+        if (!isPassable) {
+          cell.classList.add('obstacle');
+          cell.textContent = '🗻';
+          cell.title = cellData.name + " (不可通行)";
+          cell.addEventListener('click', () => alert("山岭阻挡，无法通行。"));
+        } else {
+          cell.textContent = cellData.name;
+          if (cellData.isBattlefield) {
+            cell.classList.add('battlefield');
+          }
+        }
+
+        if (x === cx && y === cy) {
+          cell.classList.add('current');
+        } else if (isPassable) {
+          const dx = Math.abs(x - cx);
+          const dy = Math.abs(y - cy);
+          const isAdjacent = (dx + dy === 1);
+          if (isAdjacent) {
+            cell.classList.add('adjacent');
+            cell.addEventListener('click', () => moveTo(x, y));
+          } else {
+            cell.classList.add('unreachable');
+            cell.addEventListener('click', () => alert("距离太远，无法直接到达。"));
+          }
+        }
+        mapGrid.appendChild(cell);
+      }
+    }
+  }
+
+  function moveTo(x, y) {
+    if (!passableGrid[y][x]) {
+      alert("前方是山岭，无法通过。");
+      return;
+    }
+    player.locationX = x;
+    player.locationY = y;
+    updateMap();
+    updateStatus();
+    const loc = getCurrentLocation();
+    if (loc.isBattlefield) {
+      alert("前方是战场！有敌人出没，请做好准备。");
+    }
+  }
+
+  // ---------- 战斗逻辑 ----------
+  function updateEnemyPanel() {
+    if (!currentEnemy) return;
+    enemyPanel.innerHTML = `
+      <p><span class="label">【${escapeHtml(currentEnemy.name)}】</span></p>
+      <p><span class="label">生命：</span> ${currentEnemy.hp} / ${currentEnemy.maxHp}</p>
+      <p><span class="label">攻击：</span> ${currentEnemy.attack}　
+         <span class="label">防御：</span> ${currentEnemy.defense}</p>
+    `;
+  }
+
+  function startBattle() {
+    const loc = getCurrentLocation();
+    if (!loc.isBattlefield || !loc.enemy) {
+      alert("这里没有敌人可以战斗。");
+      return;
+    }
+    currentEnemy = { ...loc.enemy, maxHp: loc.enemy.hp };
+    battleActive = true;
+    clearLog();
+    log(`⚡ 你遭遇了 ${currentEnemy.name}！`);
+    updateEnemyPanel();
+    statusSection.classList.add('hidden');
+    battleSection.classList.remove('hidden');
+    startAutoBattleBtn.disabled = false;
+    fleeBtn.disabled = false;
+  }
+
+  function endBattle(victory) {
+    stopAutoBattle();
+    battleActive = false;
+    if (victory) {
+      log(`🏆 你击败了 ${currentEnemy.name}，获得 ${currentEnemy.exp} 点历练。`);
+      player.exp += currentEnemy.exp;
+      const loc = getCurrentLocation();
+      loc.enemy = null;
+      loc.isBattlefield = false;
+      loc.name = "战场废墟";
+      loc.desc = "战斗过后，只余狼藉。";
+    }
+    setTimeout(() => {
+      battleSection.classList.add('hidden');
+      statusSection.classList.remove('hidden');
+      updateStatus();
+      updateMap();
+      currentEnemy = null;
+    }, 600);
+  }
+
+  function stopAutoBattle() {
+    if (autoBattleTimer) {
+      clearInterval(autoBattleTimer);
+      autoBattleTimer = null;
+    }
+  }
+
+  function startAutoBattle() {
+    if (!battleActive || !currentEnemy) return;
+    if (autoBattleTimer) return;
+    startAutoBattleBtn.disabled = true;
+    fleeBtn.disabled = true;
+
+    autoBattleTimer = setInterval(() => {
+      if (!battleActive || !currentEnemy) {
+        stopAutoBattle();
+        return;
+      }
+      let playerDamage = player.attack - currentEnemy.defense;
+      if (playerDamage < 1) playerDamage = 1;
+      currentEnemy.hp -= playerDamage;
+      log(`🗡️ 你出招，对 ${currentEnemy.name} 造成 ${playerDamage} 点伤害。`);
+      updateEnemyPanel();
+
+      if (currentEnemy.hp <= 0) {
+        currentEnemy.hp = 0;
+        updateEnemyPanel();
+        log(`💥 ${currentEnemy.name} 倒下了！`);
+        stopAutoBattle();
+        endBattle(true);
+        return;
+      }
+
+      let enemyDamage = currentEnemy.attack - player.defense;
+      if (enemyDamage < 1) enemyDamage = 1;
+      player.hp -= enemyDamage;
+      log(`💢 ${currentEnemy.name} 反击，对你造成 ${enemyDamage} 点伤害。`);
+      updateStatus();
+
+      if (player.hp <= 0) {
+        player.hp = 0;
+        updateStatus();
+        log(`💀 你被 ${currentEnemy.name} 击败，昏迷过去……`);
+        stopAutoBattle();
+        battleActive = false;
+        setTimeout(() => {
+          alert("你战败了，被救回新手村，伤势痊愈但损失了一些历练。");
+          player.hp = player.maxHp;
+          player.exp = Math.max(0, player.exp - 10);
+          player.locationX = START_X;
+          player.locationY = START_Y;
+          battleSection.classList.add('hidden');
+          statusSection.classList.remove('hidden');
+          updateStatus();
+          currentEnemy = null;
+        }, 800);
+      }
+    }, 800);
+  }
+
+  function fleeBattle() {
+    if (!battleActive) return;
+    stopAutoBattle();
+    log("🏃 你虚晃一招，迅速逃离了战场。");
+    battleActive = false;
+    setTimeout(() => {
+      battleSection.classList.add('hidden');
+      statusSection.classList.remove('hidden');
+      updateStatus();
+      currentEnemy = null;
+    }, 500);
+  }
+
+  // ---------- 事件绑定 ----------
+  createBtn.addEventListener('click', () => {
+    const name = nameInput.value.trim();
+    if (!name) { alert('大侠请留名！'); return; }
+    player.name = name;
+    createSection.classList.add('hidden');
+    statusSection.classList.remove('hidden');
+    updateStatus();
+  });
+
+  nameInput.addEventListener('keypress', (e) => {
+    if (e.key === 'Enter') createBtn.click();
+  });
+
+  refreshBtn.addEventListener('click', updateStatus);
+
+  toExploreBtn.addEventListener('click', () => {
+    statusSection.classList.add('hidden');
+    exploreSection.classList.remove('hidden');
+    updateMap();
+    applyZoom();
+  });
+
+  startAutoBattleBtn.addEventListener('click', startAutoBattle);
+  fleeBtn.addEventListener('click', fleeBattle);
+
+  backFromExploreBtn.addEventListener('click', () => {
+    exploreSection.classList.add('hidden');
+    statusSection.classList.remove('hidden');
+    updateStatus();
+  });
+
+  zoomOutBtn.addEventListener('click', () => setZoom(currentZoom - ZOOM_STEP));
+  zoomInBtn.addEventListener('click', () => setZoom(currentZoom + ZOOM_STEP));
+
+  mapContainer.addEventListener('wheel', (e) => {
+    e.preventDefault();
+    const delta = e.deltaY > 0 ? -ZOOM_STEP : ZOOM_STEP;
+    setZoom(currentZoom + delta);
+  });
+
+  // 动态战斗按钮
+  function insertBattleButton() {
+    const oldBtn = document.getElementById('statusToBattleBtn');
+    if (oldBtn) oldBtn.remove();
+    const loc = getCurrentLocation();
+    if (loc.isBattlefield) {
+      const btn = document.createElement('button');
+      btn.id = 'statusToBattleBtn';
+      btn.textContent = '⚔️ 进入战斗';
+      btn.style.cssText = 'background:#4a3520; margin-top:5px;';
+      btn.addEventListener('click', startBattle);
+      const flexDiv = document.querySelector('#status-section .flex-buttons');
+      if (flexDiv) {
+        flexDiv.parentNode.insertBefore(btn, flexDiv.nextSibling);
+      }
+    }
+  }
+
+  const originalMoveTo = moveTo;
+  moveTo = function(x, y) {
+    originalMoveTo(x, y);
+    insertBattleButton();
+  };
+  const originalUpdateStatus = updateStatus;
+  updateStatus = function() {
+    originalUpdateStatus();
+    insertBattleButton();
+  };
+
+  updateStatus();
+</script>
+</body>
+</html>
